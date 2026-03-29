@@ -19,83 +19,147 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Install Bubblewrap CLI
-        run: npm install -g @bubblewrap/cli@latest
-
-      - name: Create Bubblewrap config (non-interactive)
+      - name: Install Android platforms and build-tools
         run: |
-          mkdir -p twa-project
-          cat > twa-project/twa-manifest.json << 'EOF'
-          {
-            "packageId": "com.todopro.app",
-            "host": "todo-list43.netlify.app",
-            "name": "Todo Pro",
-            "launcherName": "Todo Pro",
-            "display": "standalone",
-            "themeColor": "#ff00ff",
-            "navigationColor": "#050505",
-            "navigationColorDark": "#050505",
-            "navigationDividerColor": "#050505",
-            "navigationDividerColorDark": "#050505",
-            "backgroundColor": "#050505",
-            "enableNotifications": true,
-            "startUrl": "/",
-            "iconUrl": "https://todo-list43.netlify.app/unnamed.png",
-            "maskableIconUrl": "https://todo-list43.netlify.app/unnamed.png",
-            "monochromeIconUrl": "https://todo-list43.netlify.app/unnamed.png",
-            "appVersion": "1",
-            "appVersionName": "1.0.0",
-            "orientation": "portrait",
-            "shortcuts": [],
-            "generatorApp": "bubblewrap-cli",
-            "webManifestUrl": "https://todo-list43.netlify.app/manifest.json",
-            "fallbackType": "customtabs",
-            "features": {
-              "locationDelegation": { "enabled": false },
-              "playBilling": { "enabled": false }
-            },
-            "alphaDependencies": { "enabled": false },
-            "enableSiteSettingsShortcut": true,
-            "isChromeOSOnly": false,
-            "isMetaQuest": false,
-            "fullyImmersive": false,
-            "minSdkVersion": 19,
-            "targetSdkVersion": 35,
-            "sdkVersion": 35,
-            "signingKey": {
-              "path": "./android.keystore",
-              "alias": "android"
-            },
-            "additionalTrustedOrigins": [],
-            "retainedBundles": []
+          sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Create TWA Android Project
+        run: |
+          mkdir -p twa-app/app/src/main/res/values
+          mkdir -p twa-app/app/src/main/res/xml
+          mkdir -p twa-app/app/src/main/java/com/todopro/app
+
+          cat > twa-app/settings.gradle << 'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "TodoPro"
+          include ':app'
+          EOF
+
+          cat > twa-app/build.gradle << 'EOF'
+          plugins {
+              id 'com.android.application' version '8.2.0' apply false
           }
           EOF
 
-      - name: Generate Android project with Bubblewrap
-        run: |
-          cd twa-project
-          bubblewrap generate --manifest ./twa-manifest.json
-        env:
-          BUBBLEWRAP_SKIP_UPDATE_CHECK: 'true'
-          BUBBLEWRAP_JDK_PATH: '/usr/lib/jvm/temurin-17-amd64'
+          cat > twa-app/app/build.gradle << 'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.todopro.app'
+              compileSdk 34
+              defaultConfig {
+                  applicationId 'com.todopro.app'
+                  minSdk 19
+                  targetSdk 34
+                  versionCode 1
+                  versionName '1.0'
+              }
+              buildTypes {
+                  debug { debuggable true }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          dependencies {
+              implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+          }
+          EOF
 
-      - name: Make Gradle executable
-        run: chmod +x twa-project/gradlew
+          cat > twa-app/app/src/main/AndroidManifest.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <application
+                  android:allowBackup="true"
+                  android:label="@string/app_name"
+                  android:theme="@style/Theme.TodoPro"
+                  android:supportsRtl="true">
+                  <activity
+                      android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"
+                      android:exported="true">
+                      <meta-data
+                          android:name="android.support.customtabs.trusted.DEFAULT_URL"
+                          android:value="https://todo-list43.netlify.app" />
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                      <intent-filter android:autoVerify="true">
+                          <action android:name="android.intent.action.VIEW"/>
+                          <category android:name="android.intent.category.DEFAULT"/>
+                          <category android:name="android.intent.category.BROWSABLE"/>
+                          <data android:scheme="https" android:host="todo-list43.netlify.app"/>
+                      </intent-filter>
+                  </activity>
+                  <service
+                      android:name="com.google.androidbrowserhelper.trusted.DelegationService"
+                      android:enabled="@bool/enableNotification"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.support.customtabs.trusted.TRUSTED_WEB_ACTIVITY_SERVICE"/>
+                          <category android:name="android.intent.category.DEFAULT"/>
+                      </intent-filter>
+                  </service>
+              </application>
+          </manifest>
+          EOF
 
-      - name: Build Debug APK (no signing needed)
+          cat > twa-app/app/src/main/res/values/strings.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">Todo Pro</string>
+          </resources>
+          EOF
+
+          cat > twa-app/app/src/main/res/values/bools.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <bool name="enableNotification">true</bool>
+          </resources>
+          EOF
+
+          cat > twa-app/app/src/main/res/values/styles.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Theme.TodoPro" parent="android:Theme.NoTitleBar">
+                  <item name="android:windowBackground">#050505</item>
+              </style>
+          </resources>
+          EOF
+
+      - name: Setup Gradle Wrapper
         run: |
-          cd twa-project
+          cd twa-app
+          gradle wrapper --gradle-version=8.4
+          chmod +x gradlew
+
+      - name: Build Debug APK
+        run: |
+          cd twa-app
           ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: TodoPro-APK
-          path: twa-project/app/build/outputs/apk/debug/app-debug.apk
+          path: twa-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: warn
           retention-days: 30
