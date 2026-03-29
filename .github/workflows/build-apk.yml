@@ -8,7 +8,7 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -24,34 +24,78 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install Bubblewrap CLI
         run: npm install -g @bubblewrap/cli@latest
 
-      - name: Initialize TWA Project
+      - name: Create Bubblewrap config (non-interactive)
         run: |
           mkdir -p twa-project
-          cd twa-project
-          bubblewrap init \
-            --manifest https://todo-list43.netlify.app/manifest.json \
-            --directory . \
-            --skip-pwa-validation
-        env:
-          BUBBLEWRAP_SKIP_UPDATE_CHECK: 'true'
+          cat > twa-project/twa-manifest.json << 'EOF'
+          {
+            "packageId": "com.todopro.app",
+            "host": "todo-list43.netlify.app",
+            "name": "Todo Pro",
+            "launcherName": "Todo Pro",
+            "display": "standalone",
+            "themeColor": "#ff00ff",
+            "navigationColor": "#050505",
+            "navigationColorDark": "#050505",
+            "navigationDividerColor": "#050505",
+            "navigationDividerColorDark": "#050505",
+            "backgroundColor": "#050505",
+            "enableNotifications": true,
+            "startUrl": "/",
+            "iconUrl": "https://todo-list43.netlify.app/unnamed.png",
+            "maskableIconUrl": "https://todo-list43.netlify.app/unnamed.png",
+            "monochromeIconUrl": "https://todo-list43.netlify.app/unnamed.png",
+            "appVersion": "1",
+            "appVersionName": "1.0.0",
+            "orientation": "portrait",
+            "shortcuts": [],
+            "generatorApp": "bubblewrap-cli",
+            "webManifestUrl": "https://todo-list43.netlify.app/manifest.json",
+            "fallbackType": "customtabs",
+            "features": {
+              "locationDelegation": { "enabled": false },
+              "playBilling": { "enabled": false }
+            },
+            "alphaDependencies": { "enabled": false },
+            "enableSiteSettingsShortcut": true,
+            "isChromeOSOnly": false,
+            "isMetaQuest": false,
+            "fullyImmersive": false,
+            "minSdkVersion": 19,
+            "targetSdkVersion": 35,
+            "sdkVersion": 35,
+            "signingKey": {
+              "path": "./android.keystore",
+              "alias": "android"
+            },
+            "additionalTrustedOrigins": [],
+            "retainedBundles": []
+          }
+          EOF
 
-      - name: Build APK
+      - name: Generate Android project with Bubblewrap
         run: |
           cd twa-project
-          bubblewrap build --skipSigning
+          bubblewrap generate --manifest ./twa-manifest.json
+        env:
+          BUBBLEWRAP_SKIP_UPDATE_CHECK: 'true'
+          BUBBLEWRAP_JDK_PATH: '/usr/lib/jvm/temurin-17-amd64'
+
+      - name: Make Gradle executable
+        run: chmod +x twa-project/gradlew
+
+      - name: Build Debug APK (no signing needed)
+        run: |
+          cd twa-project
+          ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: TodoPro-APK
-          path: |
-            twa-project/app/build/outputs/apk/release/*.apk
-            twa-project/app/build/outputs/apk/debug/*.apk
+          path: twa-project/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: warn
           retention-days: 30
