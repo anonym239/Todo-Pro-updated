@@ -29,9 +29,15 @@ jobs:
       - name: Create TWA Android Project
         run: |
           mkdir -p twa-app/app/src/main/res/values
-          mkdir -p twa-app/app/src/main/res/xml
-          mkdir -p twa-app/app/src/main/java/com/todopro/app
 
+          # gradle.properties - WICHTIG: AndroidX aktivieren
+          cat > twa-app/gradle.properties << 'EOF'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx2048m
+          EOF
+
+          # settings.gradle
           cat > twa-app/settings.gradle << 'EOF'
           pluginManagement {
               repositories {
@@ -50,12 +56,14 @@ jobs:
           include ':app'
           EOF
 
+          # Root build.gradle
           cat > twa-app/build.gradle << 'EOF'
           plugins {
               id 'com.android.application' version '8.2.0' apply false
           }
           EOF
 
+          # App build.gradle
           cat > twa-app/app/build.gradle << 'EOF'
           plugins {
               id 'com.android.application'
@@ -83,6 +91,7 @@ jobs:
           }
           EOF
 
+          # AndroidManifest.xml
           cat > twa-app/app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -122,6 +131,7 @@ jobs:
           </manifest>
           EOF
 
+          # strings.xml
           cat > twa-app/app/src/main/res/values/strings.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
@@ -129,6 +139,7 @@ jobs:
           </resources>
           EOF
 
+          # bools.xml
           cat > twa-app/app/src/main/res/values/bools.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
@@ -136,6 +147,7 @@ jobs:
           </resources>
           EOF
 
+          # styles.xml
           cat > twa-app/app/src/main/res/values/styles.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
@@ -148,13 +160,13 @@ jobs:
       - name: Setup Gradle Wrapper
         run: |
           cd twa-app
-          gradle wrapper --gradle-version=8.4
+          gradle wrapper --gradle-version=8.4 --distribution-type=bin
           chmod +x gradlew
 
       - name: Build Debug APK
         run: |
           cd twa-app
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
