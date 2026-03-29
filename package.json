@@ -1,0 +1,52 @@
+import { getStore } from '@netlify/blobs';
+import webpush from 'web-push';
+
+export const handler = async (event) => {
+  const message = event.queryStringParameters?.message || 'Du hast eine neue Aufgabe!';
+  const title   = event.queryStringParameters?.title   || 'Todo Pro';
+
+  const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_MAILTO } = process.env;
+
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY || !VAPID_MAILTO) {
+    console.error('VAPID Keys fehlen als Umgebungsvariablen!');
+    return { statusCode: 500, body: 'VAPID Keys nicht konfiguriert.' };
+  }
+
+  webpush.setVapidDetails(`mailto:${VAPID_MAILTO}`, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+
+  const subscriptionsStore = getStore('subscriptions');
+  const { blobs } = await subscriptionsStore.list();
+
+  const notificationPayload = JSON.stringify({
+    title,
+    body: message,
+    icon: '/unnamed.png',
+    badge: '/unnamed.png',
+    vibrate: [200, 100, 200],
+    tag: 'todo-notification',
+    renotify: true
+  });
+
+  const promises = blobs.map(async (blob) => {
+    try {
+      const subscription = await subscriptionsStore.get(blob.key, { type: 'json' });
+      await webpush.sendNotification(subscription, notificationPayload);
+    } catch (error) {
+      // Abgelaufene Abos automatisch löschen
+      if (error.statusCode === 410 || error.statusCode === 404) {
+        console.log(`Abo ${blob.key} ist ungültig, wird gelöscht.`);
+        await subscriptionsStore.delete(blob.key);
+      } else {
+        console.error(`Fehler beim Senden:`, error);
+      }
+    }
+  });
+
+  await Promise.all(promises);
+
+  return {
+    statusCode: 200,
+    headers: { 'Access-Control-Allow-Origin': '*' },
+    body: `Benachrichtigungen an ${blobs.length} Abonnenten gesendet.`,
+  };
+};

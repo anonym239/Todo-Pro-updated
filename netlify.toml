@@ -1,0 +1,64 @@
+import { getStore } from '@netlify/blobs';
+import crypto from 'crypto';
+
+const getSubscriptionKey = (endpoint) => {
+    return crypto.createHash('sha256').update(endpoint).digest('hex');
+};
+
+export const handler = async (event) => {
+  const subscriptionsStore = getStore('subscriptions');
+
+  // Neues Abo speichern
+  if (event.httpMethod === 'POST') {
+    try {
+      const subscription = JSON.parse(event.body);
+      if (!subscription || !subscription.endpoint) {
+        return { statusCode: 400, body: 'Ungültiges Abo-Objekt' };
+      }
+      const key = getSubscriptionKey(subscription.endpoint);
+      await subscriptionsStore.setJSON(key, subscription);
+      return {
+        statusCode: 201,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ message: 'Abo gespeichert.' })
+      };
+    } catch (error) {
+      console.error('Fehler beim Speichern:', error);
+      return { statusCode: 500, body: 'Fehler beim Speichern des Abos.' };
+    }
+  }
+
+  // Abo löschen
+  if (event.httpMethod === 'DELETE') {
+    try {
+      const { endpoint } = JSON.parse(event.body);
+      if (!endpoint) {
+        return { statusCode: 400, body: 'Endpoint fehlt' };
+      }
+      const key = getSubscriptionKey(endpoint);
+      await subscriptionsStore.delete(key);
+      return {
+        statusCode: 200,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ message: 'Abo gelöscht.' })
+      };
+    } catch (error) {
+      console.error('Fehler beim Löschen:', error);
+      return { statusCode: 500, body: 'Fehler beim Löschen des Abos.' };
+    }
+  }
+
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type'
+      },
+      body: ''
+    };
+  }
+
+  return { statusCode: 405, body: 'Methode nicht erlaubt' };
+};
